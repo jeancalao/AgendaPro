@@ -1,0 +1,187 @@
+// Schema Prisma do AgendaPRO
+// Banco de dados: PostgreSQL via Railway
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum AppointmentStatus {
+  PENDING    // aguardando confirmação
+  CONFIRMED  // confirmado
+  CANCELLED  // cancelado
+  COMPLETED  // concluído
+  NO_SHOW    // cliente não compareceu
+}
+
+// ─────────────────────────────────────────
+// Profissional autônomo (dono da conta)
+// ─────────────────────────────────────────
+model Professional {
+  id                 String             @id @default(cuid())
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  supabaseId         String             @unique // ID do usuário no Supabase Auth
+  name               String
+  email              String             @unique
+  phone              String?
+
+  slug               String             @unique // URL pública: agendapro.com/joao-silva
+  bio                String?            @db.Text
+  avatarUrl          String?
+
+  timezone           String             @default("America/Sao_Paulo")
+  isActive           Boolean            @default(true)
+
+  subscriptionPlan   SubscriptionPlan   @default(FREE)
+  subscriptionStatus SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId   String?
+
+  services           Service[]
+  availabilities     Availability[]
+  blockedSlots       BlockedSlot[]
+  appointments       Appointment[]
+  clients            Client[]
+
+  @@map("professionals")
+}
+
+// ─────────────────────────────────────────
+// Serviço oferecido pelo profissional
+// ─────────────────────────────────────────
+model Service {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  professionalId String
+  name           String
+  description    String?  @db.Text
+  durationMinutes Int
+  price          Decimal  @db.Decimal(10, 2)  // em BRL
+  isActive       Boolean  @default(true)
+  color          String   @default("#2E75B6")  // cor no calendário (hex)
+
+  professional   Professional  @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  appointments   Appointment[]
+
+  @@map("services")
+}
+
+// ─────────────────────────────────────────
+// Disponibilidade semanal recorrente
+// ─────────────────────────────────────────
+model Availability {
+  id             String    @id @default(cuid())
+
+  professionalId String
+  dayOfWeek      DayOfWeek
+  startTime      String    // "HH:mm" ex: "09:00"
+  endTime        String    // "HH:mm" ex: "18:00"
+  isActive       Boolean   @default(true)
+
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@map("availabilities")
+}
+
+// ─────────────────────────────────────────
+// Horários bloqueados (férias, feriados, etc.)
+// ─────────────────────────────────────────
+model BlockedSlot {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+
+  professionalId String
+  startDateTime  DateTime
+  endDateTime    DateTime
+  reason         String?
+
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@map("blocked_slots")
+}
+
+// ─────────────────────────────────────────
+// Cliente do profissional
+// ─────────────────────────────────────────
+model Client {
+  id             String    @id @default(cuid())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  professionalId String
+  name           String
+  email          String
+  phone          String?
+  notes          String?   @db.Text
+  isActive       Boolean   @default(true)  // soft delete
+
+  professional   Professional  @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  appointments   Appointment[]
+
+  @@unique([professionalId, email])
+  @@index([professionalId, isActive])
+  @@map("clients")
+}
+
+// ─────────────────────────────────────────
+// Agendamento
+// ─────────────────────────────────────────
+model Appointment {
+  id             String            @id @default(cuid())
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  professionalId String
+  serviceId      String
+  clientId       String
+
+  startDateTime  DateTime
+  endDateTime    DateTime
+  status         AppointmentStatus @default(PENDING)
+
+  notes          String?           @db.Text
+  cancelReason   String?
+  cancelledAt    DateTime?
+  reminderSentAt DateTime?         // quando o lembrete foi enviado
+
+  professional   Professional @relation(fields: [professionalId], references: [id])
+  service        Service      @relation(fields: [serviceId], references: [id])
+  client         Client       @relation(fields: [clientId], references: [id])
+
+  @@index([professionalId, startDateTime])
+  @@index([clientId])
+  @@map("appointments")
+}
