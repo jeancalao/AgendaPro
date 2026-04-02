@@ -42,8 +42,8 @@ export function ServicesPage() {
     setForm({
       name:            service.name,
       description:     service.description || '',
-      durationMinutes: service.durationMinutes,
-      price:           service.price,
+      durationMinutes: Number(service.durationMinutes),
+      price:           Number(service.price),
       color:           service.color,
     });
     setFormError('');
