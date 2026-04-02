@@ -4,7 +4,15 @@ import { createHash } from 'crypto';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Inicialização lazy: evita crash na startup se a chave não estiver configurada
+let resend: Resend | null = null;
+function getResend(): Resend {
+  if (!resend) {
+    if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY não configurada');
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resend;
+}
 
 const FROM_EMAIL  = process.env.EMAIL_FROM  || 'AgendaPRO <noreply@agendapro.com.br>';
 const APP_URL     = process.env.APP_URL     || 'http://localhost:5173';
@@ -36,7 +44,7 @@ function formatPrice(price: any): string {
 
 async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   try {
-    const { error } = await resend.emails.send({ from: FROM_EMAIL, to, subject, html });
+    const { error } = await getResend().emails.send({ from: FROM_EMAIL, to, subject, html });
     if (error) {
       console.error('[EMAIL ERROR]', error);
     }
